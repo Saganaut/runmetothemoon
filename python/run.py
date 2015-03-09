@@ -8,13 +8,15 @@ from PIL import Image
 import time
 import winkeys
 import os
-import csv 
+import csv
 import random
 
 #win key codes
-keys_dict = {'q':0x10, 'w':0x11, 'o':0x18, 'p':0x19, 'space':0x39, 'r':0x13}
-muta_dict = {0:'p', 1:'p', 2:'w', 3:'q'}
+keys_dict = {'q':[0x10], 'w':[0x11], 'o':[0x18], 'p':[0x19], 'space':[0x39], 'r':[0x13],
+						 'a':[0x10,0x11], 's':[0x10,0x18], 'd':[0x10,0x19], 'f':[0x11,0x18], 'g':[0x11,0x19], 'h':[0x19,0x18]}
+muta_dict = {0:'p', 1:'p', 2:'w', 3:'q', 4:'s', 5:'d', 6:'f', 7:'g', 8:'a', 9:'h'}
 generations = 10000
+
 
 def get_score(top=False):
 	if top:
@@ -40,7 +42,7 @@ def done_yet():
 	if r == 237 and g == 237 and b == 237: #237s finish screen
 		return True
 	return False
-	
+
 
 def test_individual(genome):
 	print genome
@@ -51,24 +53,33 @@ def test_individual(genome):
 		if c % 20 == 0:
 			if done_yet():
 				break;
-		winkeys.hit_key(keys_dict[genome[c%n]], 0.1)
+		key = keys_dict[genome[c%n]]
+		if len(key) > 1:
+			winkeys.hit_key(key[0], 0.1, key[1])
+		else:
+			winkeys.hit_key(key[0], 0.1)
 		c+=1
-		if c > 250:
-			score = get_score(True) 
+		if c > 300:
+			score = get_score(True)
 			print "stuck, resetting:"
-			winkeys.hit_key(keys_dict['r'], 0.1)
+			winkeys.hit_key(keys_dict['r'][0], 0.1)
 			return score
 	score = get_score()
 	return score
 
-def start_simulation():
+def start_simulation(starting_file = None):
+	worst_dude = (None, 0.0)
 	base_str = "../data/gen"
-	c = 0
-	last_viable_gen = 0
-	while os.path.isfile(base_str+str(c)):
-		c+=1
-	c-=1
-	pool = populate_species_from_file(base_str+str(c))
+	if starting_file == None:
+		c = 0
+		last_viable_gen = 0
+		while os.path.isfile(base_str+str(c)):
+			c+=1
+		c-=1
+		pool = populate_species_from_file(base_str+str(c))
+	else:
+		pool = populate_species_from_file(starting_file)
+		c = int(starting_file[-1:])
 	#evaluate current pool
 	for i in range(5,1,-1):
 		time.sleep(1)
@@ -81,24 +92,35 @@ def start_simulation():
 			genome = pool[s]
 			if genome[1] != None:
 				continue
-			winkeys.hit_key(keys_dict['space'], 0.05)
+			winkeys.hit_key(keys_dict['space'][0], 0.05)
 			score = test_individual(genome[0])
 			pool[s] = (genome[0], score)
-		pool = sorted(pool, key=lambda specie: specie[1], reverse=True)  	
-		print pool
-		
+			if score < worst_dude[1]:
+				worst_dude = pool[s]
+				print worst_dude
+		pool = sorted(pool, key=lambda specie: specie[1], reverse=True)
+
+		for victor in pool[0:10]:
+			print victor[0][:20] + " " + str(victor[1])
+
 		if g % 2 == 0:
+			save_worst_dude(g, worst_dude)
 			write_species_to_file(g, pool)
 		babies = []
 		for i in range(4):
 			for j in range(i+1,4):
 				babies += get_nasty(pool[i][0], pool[j][0], current_genomes)
+		# rando couple
+		babies += get_nasty(pool[random.randint(0,20)][0], pool[random.randint(0,20)][0], current_genomes)
 		pool+=babies
-		print pool
 
-	
+def save_worst_dude(gen, worst_dude):
+	with open('../data/worst_dude'+str(gen), 'wb') as csvfile:
+		 spamwriter = csv.writer(csvfile, delimiter='\t', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+		 spamwriter.writerow([worst_dude[0], worst_dude[1]])
+
 def write_species_to_file(gen, pool):
-	sorted(pool, key=lambda specie: specie[1], reverse=True)  
+	sorted(pool, key=lambda specie: specie[1], reverse=True)
 	with open('../data/gen'+str(gen), 'wb') as csvfile:
 		 spamwriter = csv.writer(csvfile, delimiter='\t', quotechar='|', quoting=csv.QUOTE_MINIMAL)
 		 for specie in pool[:min(250,len(pool))]:
@@ -117,7 +139,7 @@ def populate_species_from_file(filename):
 				pool.append((row[0], float(row[1])))
 	return pool
 
-def get_nasty(genome0, genome1, already_seen, mutation_rate=0.02):
+def get_nasty(genome0, genome1, already_seen, mutation_rate=0.05):
 	pool = []
 	quart = len(genome1)/4
 	half = len(genome1)/2
@@ -139,6 +161,8 @@ def get_nasty(genome0, genome1, already_seen, mutation_rate=0.02):
 	if not tempy[0] in already_seen:
 		pool.append(tempy)
 	pool = add_mutations(pool, mutation_rate)
+	for specie in pool:
+		already_seen.add(specie[0])
 	return pool
 
 
@@ -149,7 +173,7 @@ def add_mutations(pool, rate):
 		for i in range(len(genome)):
 			muta = random.random()
 			if muta <= rate:
-				new_genome += muta_dict[random.randint(0,3)]
+				new_genome += muta_dict[random.randint(0,7)]
 			else:
 				new_genome += genome[i]
 		pool[g] = (new_genome, None)
