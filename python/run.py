@@ -16,33 +16,30 @@ keys_dict = {'q':[0x10], 'w':[0x11], 'o':[0x18], 'p':[0x19], 'space':[0x39], 'r'
 						 'a':[0x10,0x11], 's':[0x10,0x18], 'd':[0x10,0x19], 'f':[0x11,0x18], 'g':[0x11,0x19], 'h':[0x19,0x18]}
 muta_dict = {0:'p', 1:'p', 2:'w', 3:'q', 4:'s', 5:'d', 6:'f', 7:'g', 8:'a', 9:'h'}
 generations = 10000
-
+clock_mult = 3.0
 
 def get_score(top=False):
 	if top:
-		im=ImageGrab.grab(bbox=(500,320,730,375))
-		im.save('out.bmp')
+		im=ImageGrab.grab(bbox=(480,310,730,355))
 	else:
-		im=ImageGrab.grab(bbox=(540,495,700,520)) # X1,Y1,X2,Y2
+		im=ImageGrab.grab(bbox=(530,465,700,510)) # X1,Y1,X2,Y2
 	stringy = image_to_string(im)
-
-	# pieces = stringy.split(" ")
 	mgone =  stringy[0:stringy.find("m")]
 	try:
 		score = float(mgone.replace(" ", ""))
 	except ValueError:
 		return None
-	print score
 	return score
 
 def done_yet():
-	test_im=ImageGrab.grab(bbox=(500,500,501,501)) # X1,Y1,X2,Y2
+	test_im=ImageGrab.grab(bbox=(815,400,816,550)) # X1,Y1,X2,Y2
 	rgb_im = test_im.convert('RGB')
 	r, g, b = rgb_im.getpixel((0, 0))
-	if r == 237 and g == 237 and b == 237: #237s finish screen
+	r1, g1, b1 = rgb_im.getpixel((0, 140))
+	print r, g, b, r1, g1, b1
+	if r == 237 and g == 237 and b == 237 and r1 == 237 and g1 == 237 and b1 == 237: #237s finish screen
 		return True
 	return False
-
 
 def test_individual(genome):
 	print genome
@@ -55,16 +52,18 @@ def test_individual(genome):
 				break;
 		key = keys_dict[genome[c%n]]
 		if len(key) > 1:
-			winkeys.hit_key(key[0], 0.1, key[1])
+			winkeys.hit_key(key[0], 0.1/clock_mult, key[1])
 		else:
-			winkeys.hit_key(key[0], 0.1)
+			winkeys.hit_key(key[0], 0.1/clock_mult)
 		c+=1
 		if c > 300:
 			score = get_score(True)
-			print "stuck, resetting:"
-			winkeys.hit_key(keys_dict['r'][0], 0.1)
+			time.sleep(0.2)
+			print "stuck, resetting @ score:" + str(score)
+			reset()
 			return score
 	score = get_score()
+	print score
 	return score
 
 def start_simulation(starting_file = None):
@@ -74,8 +73,8 @@ def start_simulation(starting_file = None):
 		c = 0
 		last_viable_gen = 0
 		while os.path.isfile(base_str+str(c)):
-			c+=1
-		c-=1
+			c+=2
+		c-=2
 		pool = populate_species_from_file(base_str+str(c))
 	else:
 		pool = populate_species_from_file(starting_file)
@@ -92,27 +91,29 @@ def start_simulation(starting_file = None):
 			genome = pool[s]
 			if genome[1] != None:
 				continue
-			winkeys.hit_key(keys_dict['space'][0], 0.05)
+			reset()
+			time.sleep(0.05)
 			score = test_individual(genome[0])
 			pool[s] = (genome[0], score)
-			if score < worst_dude[1]:
-				worst_dude = pool[s]
-				print worst_dude
 		pool = sorted(pool, key=lambda specie: specie[1], reverse=True)
 
 		for victor in pool[0:10]:
 			print victor[0][:20] + " " + str(victor[1])
 
 		if g % 2 == 0:
-			save_worst_dude(g, worst_dude)
 			write_species_to_file(g, pool)
-		babies = []
+			pool = pool[:250]
+		babies = add_mutations(pool[0:15],0.25)
 		for i in range(4):
 			for j in range(i+1,4):
 				babies += get_nasty(pool[i][0], pool[j][0], current_genomes)
 		# rando couple
-		babies += get_nasty(pool[random.randint(0,20)][0], pool[random.randint(0,20)][0], current_genomes)
+		babies += get_nasty(pool[random.randint(0,len(pool)/2)][0], pool[random.randint(0,len(pool)/2)][0], current_genomes)
 		pool+=babies
+
+def reset():
+	winkeys.hit_key(keys_dict['space'][0], 0.1)
+	winkeys.hit_key(keys_dict['r'][0], 0.1)
 
 def save_worst_dude(gen, worst_dude):
 	with open('../data/worst_dude'+str(gen), 'wb') as csvfile:
@@ -180,5 +181,9 @@ def add_mutations(pool, rate):
 	return pool
 
 if __name__ == '__main__':
-  start_simulation()
-  # get_score(True)
+	start_simulation()
+	# test_im=ImageGrab.grab(bbox=(815,400,816,550)) # X1,Y1,X2,Y2
+	# test_im.save('out.bmp')
+	# im=ImageGrab.grab(bbox=(500,310,730,355))
+	# im.save('out.bmp')
+  # print get_score()
